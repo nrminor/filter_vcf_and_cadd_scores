@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "29234"
+version = "0.1.0"
+description = ""
+authors = ["Nicholas Minor <nrminor@wisc.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+polars = "^0.19.7"
+result = "^0.13.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

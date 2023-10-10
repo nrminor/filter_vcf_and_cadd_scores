@@ -1,0 +1,6 @@
+# Mac OS hidden files
+.DS_Store
+._*
+
+# R history files
+.Rhistory
