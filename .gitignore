@@ -10,6 +10,7 @@ input/
 data/
 vcfs/
 *.vcf*
+*.tsv
 
 # development and debugging directories
 dev/

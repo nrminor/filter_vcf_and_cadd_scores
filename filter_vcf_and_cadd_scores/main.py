@@ -45,11 +45,15 @@ def parse_command_line_args() -> Result[argparse.Namespace, str]:
                         type=str,
                         required=True,
                         help="Text file with one animal name per line.")
+    parser.add_argument("--label", "-l",
+                        type=str,
+                        required=True,
+                        help="A label for the data you are running on.")
     args = parser.parse_args()
     
     return Ok(args)
 
-def unify_sample_names(animals: pl.DataFrame, vcf_path: str) -> Result[NewFile, str]:
+def unify_sample_names(animals: pl.DataFrame, vcf_path: str, label: str) -> Result[NewFile, str]:
     """
         This function double checks the VCF at the provided path to make
         sure the sample names in the VCF are the same as the sample names
@@ -130,7 +134,7 @@ def unify_sample_names(animals: pl.DataFrame, vcf_path: str) -> Result[NewFile, 
             print(f"{line[0]}\t{line[1]}", file=out_handle)
 
     # create the BCFTools command and run it in a subprocess
-    new_vcf = "renamed_samples.vcf.gz"
+    new_vcf = f"{label}_renamed_samples.vcf.gz"
     with open(new_vcf, "w", encoding="utf-8") as vcf_handle:
         bcftools_process = subprocess.Popen(("bcftools", "reheader", "--samples",
                            "new_sample_names.txt", vcf_path), 
@@ -163,7 +167,7 @@ def unify_sample_names(animals: pl.DataFrame, vcf_path: str) -> Result[NewFile, 
 
     return Ok(new_file)
 
-def filter_vcf_samples(vcf_path: str, animals: str) -> Result[NewFile, str]:
+def filter_vcf_samples(vcf_path: str, animals: str, label: str) -> Result[NewFile, str]:
     """
         Run VCFTools to filter a VCF based on a text file of sample IDs to keep.
 
@@ -200,7 +204,7 @@ def filter_vcf_samples(vcf_path: str, animals: str) -> Result[NewFile, str]:
     ]
 
     # run VCFtools
-    new_vcf = "filtered.vcf.gz"
+    new_vcf = f"{label}_filtered.vcf.gz"
     with open(new_vcf, "wb") as vcf_handle:
         vcftools_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         gzip_process = subprocess.Popen(["gzip", "-c"], stdin=vcftools_process.stdout,
@@ -292,6 +296,7 @@ def main() -> None:
             vcf_path = result.vcf
             table_path = result.cadd_table
             animals = result.animal_file
+            label = result.label
         case Err(result):
             sys.exit(f"{result}")
 
@@ -299,7 +304,7 @@ def main() -> None:
     animals_df = pl.read_csv(animals, separator='\t', null_values = ["NA", ""],
                              has_header=False, new_columns=["Sample ID"]).select(
                                 pl.col(["Sample ID"])).drop_nulls()
-    unify_result = unify_sample_names(animals_df, vcf_path)
+    unify_result = unify_sample_names(animals_df, vcf_path, label)
     match unify_result:
         case Ok(result):
             renamed_vcf_path = result.path
@@ -307,7 +312,7 @@ def main() -> None:
             sys.exit(f"{result}")
 
     # filter the VCF
-    filtering_result = filter_vcf_samples(renamed_vcf_path, animals)
+    filtering_result = filter_vcf_samples(renamed_vcf_path, animals, label)
     match filtering_result:
         case Ok(result):
             filtered_vcf = result.path
@@ -329,7 +334,7 @@ def main() -> None:
     cadd_score_lazy = cadd_score_df.lazy()
     positions.join(
         cadd_score_lazy, left_on="Positions", right_on="Pos", how="left"
-    ).sink_csv("filtered_cadd_scores.tsv", separator='\t')
+    ).sink_csv(f"{label}_filtered_cadd_scores.tsv", separator='\t')
 
 if __name__ == "__main__":
     main()
