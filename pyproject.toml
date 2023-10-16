@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.11"
 polars = "^0.19.7"
 result = "^0.13.1"
+pdoc = "^14.1.0"
 
 
 [build-system]

@@ -46,8 +46,7 @@ def parse_command_line_args() -> Result[argparse.Namespace, str]:
                         required=True,
                         help="Text file with one animal name per line.")
     args = parser.parse_args()
-    if len(args.items()) < 3:
-        return Err("Command line arguments failed to parse.")
+    
     return Ok(args)
 
 def unify_sample_names(animals: pl.DataFrame, vcf_path: str) -> Result[NewFile, str]:
@@ -70,7 +69,7 @@ def unify_sample_names(animals: pl.DataFrame, vcf_path: str) -> Result[NewFile, 
         by VCFtools, or an informative error message.
     """
 
-    if not vcf_path.endswith(".vcf.gz") or not vcf_path.endswith(".vcf"):
+    if not vcf_path.endswith(".vcf.gz") and not vcf_path.endswith(".vcf"):
         return Err("VCF is not in a recognizable format. Please double \
                    check that your VCF file is either gzip-compressed and \
                    ends with '.vcf.gz', or is uncompressed and ends with \
@@ -101,7 +100,13 @@ def unify_sample_names(animals: pl.DataFrame, vcf_path: str) -> Result[NewFile, 
     meta_samples = animals.select(
         "Sample ID"
     ).drop_nulls().to_series().to_list()
-
+    
+    # make sure the animal IDs are the same types
+    if not all(type(meta_sample) == type(vcf_sample) 
+               for meta_sample, vcf_sample in zip(meta_samples, vcf_samples)):
+        meta_samples = [str(sample) for sample in meta_samples]
+        vcf_samples = [str(sample) for sample in vcf_samples]
+        
     # match the two lists, permitting no samples to be unmatched
     matched_sample_ids = []
     for meta_sample in meta_samples:
@@ -111,6 +116,11 @@ def unify_sample_names(animals: pl.DataFrame, vcf_path: str) -> Result[NewFile, 
                 break
     if len(matched_sample_ids) == 0:
         return Err("Failed to match sample IDs between VCF and provided animal names")
+    
+    # return the original VCF if the paths are the same
+    if all(x == y for x, y in matched_sample_ids):
+        original_vcf = NewFile(vcf_path, vcf_path)
+        return Ok(original_vcf)
 
     # write a two column text file, where the first column is names
     # in the VCF (old names), and the second column is names in the
@@ -167,7 +177,7 @@ def filter_vcf_samples(vcf_path: str, animals: str) -> Result[NewFile, str]:
     """
 
     # handle the possibility that the VCF is not named or formatted correctly
-    if not vcf_path.endswith(".vcf.gz") or not vcf_path.endswith(".vcf"):
+    if not vcf_path.endswith(".vcf.gz") and not vcf_path.endswith(".vcf"):
         return Err("VCF is not in a recognizable format. Please double \
                    check that your VCF file is either gzip-compressed and \
                    ends with '.vcf.gz', or is uncompressed and ends with \
@@ -191,7 +201,7 @@ def filter_vcf_samples(vcf_path: str, animals: str) -> Result[NewFile, str]:
 
     # run VCFtools
     new_vcf = "filtered.vcf.gz"
-    with open(new_vcf, "wb", encoding="utf-8") as vcf_handle:
+    with open(new_vcf, "wb") as vcf_handle:
         vcftools_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         gzip_process = subprocess.Popen(["gzip", "-c"], stdin=vcftools_process.stdout,
                                         stdout=vcf_handle, stderr=subprocess.PIPE)
@@ -236,7 +246,7 @@ def collect_filtered_positions(vcf_path: str) -> Result[pl.LazyFrame, str]:
         LazyFrame of the positions, or an informative error message.
     """
 
-    if not vcf_path.endswith(".vcf.gz") or not vcf_path.endswith(".vcf"):
+    if not vcf_path.endswith(".vcf.gz") and not vcf_path.endswith(".vcf"):
         return Err("VCF is not in a recognizable format. Please double \
                    check that your VCF file is either gzip-compressed and \
                    ends with '.vcf.gz', or is uncompressed and ends with \
@@ -286,8 +296,8 @@ def main() -> None:
             sys.exit(f"{result}")
 
     # make sure animal names match the sample IDs in the VCF
-    animals_df = pl.read_excel(animals,
-                            read_csv_options={"null_values": ["NA", ""]}).select(
+    animals_df = pl.read_csv(animals, separator='\t', null_values = ["NA", ""],
+                             has_header=False, new_columns=["Sample ID"]).select(
                                 pl.col(["Sample ID"])).drop_nulls()
     unify_result = unify_sample_names(animals_df, vcf_path)
     match unify_result:
@@ -314,11 +324,12 @@ def main() -> None:
 
     # lazily read the CADD Score table and filter its rows to only those
     # that contain a mutation that is present in the newly filtered VCF
-    cadd_score_df = pl.scan_csv(table_path, separator = '\t')
-    final_cadd_scores = positions.join(
-        cadd_score_df, left_on="Positions", right_on="POSITION", how="left"
-        )
-    final_cadd_scores.sink_csv("filtered_cadd_scores.tsv", separator='\n')
+    cadd_score_df = pl.read_csv(table_path, separator = '\t', skip_rows=1, null_values=["NA"], ignore_errors=True)
+    assert "Pos" in cadd_score_df.columns, "Position column named 'Pos' is missing in CADD score file."
+    cadd_score_lazy = cadd_score_df.lazy()
+    positions.join(
+        cadd_score_lazy, left_on="Positions", right_on="Pos", how="left"
+    ).sink_csv("filtered_cadd_scores.tsv", separator='\t')
 
 if __name__ == "__main__":
     main()

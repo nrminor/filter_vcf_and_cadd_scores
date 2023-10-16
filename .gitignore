@@ -4,3 +4,14 @@
 
 # R history files
 .Rhistory
+
+# input files and directories
+input/
+data/
+vcfs/
+*.vcf*
+
+# development and debugging directories
+dev/
+debug/
+sandbox/
