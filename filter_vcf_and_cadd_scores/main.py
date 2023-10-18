@@ -364,6 +364,8 @@ def main() -> None:
         cadd_score_lazy, on="Full Position", how="left"
     ).select(
         pl.exclude("Full Position")
+    ).filter(
+        ~pl.all_horizontal(pl.all().is_null())
     ).sink_csv(
         f"{label}_filtered_cadd_scores.tsv", separator='\t'
     )
