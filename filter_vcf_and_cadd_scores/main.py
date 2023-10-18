@@ -257,7 +257,7 @@ def collect_filtered_positions(vcf_path: str) -> Result[pl.LazyFrame, str]:
                    '.vcf'.")
 
     # define the command
-    command = ["bcftools", "query", "-f", "%POS\n", vcf_path]
+    command = ["bcftools", "query", "-f", "%CHROM\t%POS\n", vcf_path]
 
     # Run the command and collect the output
     result = subprocess.run(command,
@@ -271,16 +271,33 @@ def collect_filtered_positions(vcf_path: str) -> Result[pl.LazyFrame, str]:
                    terminated with exit code {exitcode}:\n{result.stderr}")
 
     # The stdout contains the positions, one per line
-    positions = result.stdout.strip().split("\n")
+    raw_positions = result.stdout.strip().split("\n")
+    
+    # unpack the results into chromosomes and positions
+    chromosomes, positions = zip(*[line.split("\t") for line in raw_positions])
+    positions = list(map(int, positions))  # Convert positions to integers
 
     # Convert to integers and double check that the list isn't empty
-    positions = list(map(int, positions))
     if len(positions) == 0:
         return Err("BCFtools encountered a silent error such that the constructed\
                    list of positions is empty")
 
     # convert the list to a polars dataframe and return it
-    position_df = pl.LazyFrame({"Positions": positions})
+    position_df = pl.LazyFrame(
+        {"Chromosomes": chromosomes, "Positions": positions}
+        ).with_columns(
+            pl.concat_str(
+            [
+                pl.col("Chromosomes"),
+                pl.col("Positions"),
+            ],
+            separator="-",
+        ).alias("Full Position"),
+    ).select(
+            "Full Position"
+    ).with_columns(
+        pl.col("Full Position").str.replace_all("chr", "").alias("Full Position")
+    )
     return Ok(position_df)
 
 def main() -> None:
@@ -330,11 +347,26 @@ def main() -> None:
     # lazily read the CADD Score table and filter its rows to only those
     # that contain a mutation that is present in the newly filtered VCF
     cadd_score_df = pl.read_csv(table_path, separator = '\t', skip_rows=1, null_values=["NA"], ignore_errors=True)
+    
     assert "Pos" in cadd_score_df.columns, "Position column named 'Pos' is missing in CADD score file."
-    cadd_score_lazy = cadd_score_df.lazy()
+    assert "Chrom" in cadd_score_df.columns, "Chromosome column named 'Chrom' is missing in CADD score file."
+    
+    cadd_score_lazy = cadd_score_df.lazy().with_columns(
+            pl.concat_str(
+            [
+                pl.col("Chrom"),
+                pl.col("Pos"),
+            ],
+            separator="-",
+        ).alias("Full Position"),
+    )
     positions.join(
-        cadd_score_lazy, left_on="Positions", right_on="Pos", how="left"
-    ).sink_csv(f"{label}_filtered_cadd_scores.tsv", separator='\t')
+        cadd_score_lazy, on="Full Position", how="left"
+    ).select(
+        pl.exclude("Full Position")
+    ).sink_csv(
+        f"{label}_filtered_cadd_scores.tsv", separator='\t'
+    )
 
 if __name__ == "__main__":
     main()
