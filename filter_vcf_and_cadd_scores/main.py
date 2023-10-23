@@ -75,9 +75,9 @@ def unify_sample_names(animals: pl.DataFrame, vcf_path: str, label: str) -> Resu
 
     if not vcf_path.endswith(".vcf.gz") and not vcf_path.endswith(".vcf"):
         return Err("VCF is not in a recognizable format. Please double \
-                   check that your VCF file is either gzip-compressed and \
-                   ends with '.vcf.gz', or is uncompressed and ends with \
-                   '.vcf'.")
+                    check that your VCF file is either gzip-compressed and \
+                    ends with '.vcf.gz', or is uncompressed and ends with \
+                    '.vcf'.")
 
     # create a list of sample names from the VCF
     vcf_samples = []
@@ -107,7 +107,7 @@ def unify_sample_names(animals: pl.DataFrame, vcf_path: str, label: str) -> Resu
     
     # make sure the animal IDs are the same types
     if not all(type(meta_sample) == type(vcf_sample) 
-               for meta_sample, vcf_sample in zip(meta_samples, vcf_samples)):
+                for meta_sample, vcf_sample in zip(meta_samples, vcf_samples)):
         meta_samples = [str(sample) for sample in meta_samples]
         vcf_samples = [str(sample) for sample in vcf_samples]
         
@@ -137,8 +137,8 @@ def unify_sample_names(animals: pl.DataFrame, vcf_path: str, label: str) -> Resu
     new_vcf = f"{label}_renamed_samples.vcf.gz"
     with open(new_vcf, "w", encoding="utf-8") as vcf_handle:
         bcftools_process = subprocess.Popen(("bcftools", "reheader", "--samples",
-                           "new_sample_names.txt", vcf_path), 
-                           stdout=subprocess.PIPE)
+                            "new_sample_names.txt", vcf_path), 
+                            stdout=subprocess.PIPE)
         gzip_process = subprocess.Popen(["gzip", "-c"], stdin=bcftools_process.stdout,
                                         stdout=vcf_handle, stderr=subprocess.PIPE)
 
@@ -154,11 +154,11 @@ def unify_sample_names(animals: pl.DataFrame, vcf_path: str, label: str) -> Resu
     bcftools_exit_code = bcftools_process.returncode
     if bcftools_exit_code != 0:
         return Err(f"VCF renaming encountered an error with exit code {bcftools_exit_code}:\n\
-                       {bcftools_stderr}")
+                        {bcftools_stderr}")
     gzip_exit_code = gzip_process.returncode
     if gzip_exit_code != 0:
         return Err(f"VCF compression encountered an error with exit code {gzip_exit_code}:\n\
-                       {gzip_stderr}")
+                        {gzip_stderr}")
 
     # clear out temporary sample name file
     os.remove("new_sample_names.txt")
@@ -183,9 +183,9 @@ def filter_vcf_samples(vcf_path: str, animals: str, label: str) -> Result[NewFil
     # handle the possibility that the VCF is not named or formatted correctly
     if not vcf_path.endswith(".vcf.gz") and not vcf_path.endswith(".vcf"):
         return Err("VCF is not in a recognizable format. Please double \
-                   check that your VCF file is either gzip-compressed and \
-                   ends with '.vcf.gz', or is uncompressed and ends with \
-                   '.vcf'.")
+                    check that your VCF file is either gzip-compressed and \
+                    ends with '.vcf.gz', or is uncompressed and ends with \
+                    '.vcf'.")
 
     # set the VCFtools input format flag based on the VCF file name is now
     # guaranteed to be present thanks to the above error-handling
@@ -222,11 +222,11 @@ def filter_vcf_samples(vcf_path: str, animals: str, label: str) -> Result[NewFil
     vcftools_exit_code = vcftools_process.returncode
     if vcftools_exit_code != 0:
         return Err(f"VCF filtering encountered an error with exit code {vcftools_exit_code}:\n\
-                       {vcftools_stderr}")
+                        {vcftools_stderr}")
     gzip_exit_code = gzip_process.returncode
     if gzip_exit_code != 0:
         return Err(f"VCF filtering encountered an error with exit code {gzip_exit_code}:\n\
-                       {gzip_stderr}")
+                        {gzip_stderr}")
 
     # remove VCFtools log files
     for file in glob.glob("*.log"):
@@ -252,9 +252,9 @@ def collect_filtered_positions(vcf_path: str) -> Result[pl.LazyFrame, str]:
 
     if not vcf_path.endswith(".vcf.gz") and not vcf_path.endswith(".vcf"):
         return Err("VCF is not in a recognizable format. Please double \
-                   check that your VCF file is either gzip-compressed and \
-                   ends with '.vcf.gz', or is uncompressed and ends with \
-                   '.vcf'.")
+                    check that your VCF file is either gzip-compressed and \
+                    ends with '.vcf.gz', or is uncompressed and ends with \
+                    '.vcf'.")
 
     # define the command
     command = ["bcftools", "query", "-f", "%CHROM\t%POS\n", vcf_path]
@@ -268,7 +268,7 @@ def collect_filtered_positions(vcf_path: str) -> Result[pl.LazyFrame, str]:
     exitcode = result.returncode
     if exitcode != 0:
         return Err(f"BCFtools failed to find positions in the provided VCF and\
-                   terminated with exit code {exitcode}:\n{result.stderr}")
+                    terminated with exit code {exitcode}:\n{result.stderr}")
 
     # The stdout contains the positions, one per line
     raw_positions = result.stdout.strip().split("\n")
@@ -280,7 +280,7 @@ def collect_filtered_positions(vcf_path: str) -> Result[pl.LazyFrame, str]:
     # Convert to integers and double check that the list isn't empty
     if len(positions) == 0:
         return Err("BCFtools encountered a silent error such that the constructed\
-                   list of positions is empty")
+                    list of positions is empty")
 
     # convert the list to a polars dataframe and return it
     position_df = pl.LazyFrame(
@@ -319,7 +319,7 @@ def main() -> None:
 
     # make sure animal names match the sample IDs in the VCF
     animals_df = pl.read_csv(animals, separator='\t', null_values = ["NA", ""],
-                             has_header=False, new_columns=["Sample ID"]).select(
+                                has_header=False, new_columns=["Sample ID"]).select(
                                 pl.col(["Sample ID"])).drop_nulls()
     unify_result = unify_sample_names(animals_df, vcf_path, label)
     match unify_result:
