@@ -243,7 +243,7 @@ def filter_vcf_samples(vcf_path: str, animals: str, label: str) -> Result[NewFil
         "--min-ac",
         "1",
         "-i",
-        "MIN(FMT/DP)>0",
+        "COUNT(GT!='0/0' && GT!='0|0' && GT!='./.')>0",
         "--output-type",
         "z",
         "-",
