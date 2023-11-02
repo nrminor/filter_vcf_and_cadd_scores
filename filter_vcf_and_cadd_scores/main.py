@@ -237,7 +237,17 @@ def filter_vcf_samples(vcf_path: str, animals: str, label: str) -> Result[NewFil
     ]
 
     # construct the bcftools subprocess command as a list
-    bcftools_command = ["bcftools", "view", "--min-ac", "1", "--output-type", "z", "-"]
+    bcftools_command = [
+        "bcftools",
+        "view",
+        "--min-ac",
+        "1",
+        "-i",
+        "MIN(FMT/DP)>0",
+        "--output-type",
+        "z",
+        "-",
+    ]
 
     # run commands
     new_vcf = f"{label}_filtered.vcf.gz"
