@@ -16,3 +16,4 @@ vcfs/
 dev/
 debug/
 sandbox/
+.mypy_cache/

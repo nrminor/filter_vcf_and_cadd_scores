@@ -11,6 +11,7 @@ import argparse
 import subprocess
 import glob
 import gzip
+from typing import List
 from dataclasses import dataclass
 from result import Result, Ok, Err
 import polars as pl
@@ -96,18 +97,18 @@ def unify_sample_names(
         )
 
     # create a list of sample names from the VCF
-    vcf_samples = []
+    vcf_samples: List[str] = []
     if vcf_path.endswith(".gz"):
-        with gzip.open(vcf_path, "rb") as vcf_file:
-            for line in vcf_file:
-                if line.startswith(b"#CHROM"):
+        with gzip.open(vcf_path, "rb") as compressed_vcf:
+            for binary_line in compressed_vcf:
+                if binary_line.startswith(b"#CHROM"):
                     # Split the line by tabs, and extract the sample IDs
                     # starting from the 9th column (0-indexed)
-                    vcf_samples = line.decode("utf-8").strip().split("\t")[9:]
+                    vcf_samples = binary_line.decode("utf-8").strip().split("\t")[9:]
                     break
-    if vcf_path.endswith(".vcf"):
-        with open(vcf_path, "r", encoding="utf-8") as vcf_file:
-            for line in vcf_file:
+    elif vcf_path.endswith(".vcf"):
+        with open(vcf_path, "r", encoding="utf-8") as uncompressed_vcf:
+            for line in uncompressed_vcf:
                 if line.startswith("#CHROM"):
                     # Split the line by tabs, and extract the sample IDs
                     # starting from the 9th column (0-indexed)
@@ -121,7 +122,7 @@ def unify_sample_names(
 
     # make sure the animal IDs are the same types
     if not all(
-        type(meta_sample) == type(vcf_sample)
+        isinstance(meta_sample, str) and isinstance(vcf_sample, str)
         for meta_sample, vcf_sample in zip(meta_samples, vcf_samples)
     ):
         meta_samples = [str(sample) for sample in meta_samples]
@@ -146,8 +147,8 @@ def unify_sample_names(
     # in the VCF (old names), and the second column is names in the
     # metadata (new names)
     with open("new_sample_names.txt", "w", encoding="utf-8") as out_handle:
-        for line in matched_sample_ids:
-            print(f"{line[0]}\t{line[1]}", file=out_handle)
+        for sample_row in matched_sample_ids:
+            print(f"{sample_row[0]}\t{sample_row[1]}", file=out_handle)
 
     # create the BCFTools command and run it in a subprocess
     new_vcf = f"{label}_renamed_samples.vcf.gz"
@@ -174,15 +175,17 @@ def unify_sample_names(
     # Get the exit code and give an informative error message if it isn't 0
     bcftools_exit_code = bcftools_process.returncode
     if bcftools_exit_code != 0:
+        bcftools_error = bcftools_stderr.decode("utf-8")
         return Err(
             f"VCF renaming encountered an error with exit code {bcftools_exit_code}:\n\
-                        {bcftools_stderr}"
+                        {bcftools_error}"
         )
     gzip_exit_code = gzip_process.returncode
     if gzip_exit_code != 0:
+        gzip_error = gzip_stderr.decode("utf-8")
         return Err(
             f"VCF compression encountered an error with exit code {gzip_exit_code}:\n\
-                        {gzip_stderr}"
+                        {gzip_error}"
         )
 
     # clear out temporary sample name file
@@ -271,21 +274,24 @@ def filter_vcf_samples(vcf_path: str, animals: str, label: str) -> Result[NewFil
     # Get the exit code and give an informative error message if it isn't 0
     vcftools_exit_code = vcftools_process.returncode
     if vcftools_exit_code != 0:
+        vcftools_error = vcftools_stderr.decode("utf-8")
         return Err(
             f"VCF filtering encountered an error with exit code {vcftools_exit_code}:\n\
-                        {vcftools_stderr}"
+                        {vcftools_error}"
         )
     gzip_exit_code = gzip_process.returncode
     if gzip_exit_code != 0:
+        gzip_error = gzip_stderr.decode("utf-8")
         return Err(
             f"VCF filtering encountered an error with exit code {gzip_exit_code}:\n\
-                        {gzip_stderr}"
+                        {gzip_error}"
         )
     bcftools_exit_code = bcftools_process.returncode
     if bcftools_exit_code != 0:
+        bcftools_error = bcftools_stderr.decode("utf-8")
         return Err(
             f"VCF INFO reformatting failed with {bcftools_exit_code}:\n\
-                        {bcftools_stderr}"
+                        {bcftools_error}"
         )
 
     # remove VCFtools log files
@@ -339,8 +345,8 @@ def collect_filtered_positions(vcf_path: str) -> Result[pl.LazyFrame, str]:
     raw_positions = result.stdout.strip().split("\n")
 
     # unpack the results into chromosomes and positions
-    chromosomes, positions = zip(*[line.split("\t") for line in raw_positions])
-    positions = list(map(int, positions))  # Convert positions to integers
+    chromosomes, positions_str = zip(*[line.split("\t") for line in raw_positions])
+    positions: List[int] = list(map(int, positions_str))  # Convert positions to integers
 
     # Convert to integers and double check that the list isn't empty
     if len(positions) == 0:
@@ -400,26 +406,26 @@ def main() -> None:
     )
     unify_result = unify_sample_names(animals_df, vcf_path, label)
     match unify_result:
-        case Ok(result):
-            renamed_vcf_path = result.path
-        case Err(result):
-            sys.exit(f"{result}")
+        case Ok(new_file):
+            renamed_vcf_path = new_file.path
+        case Err(message):
+            sys.exit(f"{message}")
 
     # filter the VCF
     filtering_result = filter_vcf_samples(renamed_vcf_path, animals, label)
     match filtering_result:
-        case Ok(result):
-            filtered_vcf = result.path
-        case Err(result):
-            sys.exit(f"{result}")
+        case Ok(filtered_file):
+            filtered_vcf = filtered_file.path
+        case Err(message):
+            sys.exit(f"{message}")
 
     # define the positions
     position_result = collect_filtered_positions(filtered_vcf)
     match position_result:
-        case Ok(result):
-            positions = result
-        case Err(result):
-            sys.exit(f"{result}")
+        case Ok(positions):
+            pass
+        case Err(message):
+            sys.exit(f"{message}")
 
     # lazily read the CADD Score table and filter its rows to only those
     # that contain a mutation that is present in the newly filtered VCF
