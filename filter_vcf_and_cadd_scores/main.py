@@ -346,7 +346,9 @@ def collect_filtered_positions(vcf_path: str) -> Result[pl.LazyFrame, str]:
 
     # unpack the results into chromosomes and positions
     chromosomes, positions_str = zip(*[line.split("\t") for line in raw_positions])
-    positions: List[int] = list(map(int, positions_str))  # Convert positions to integers
+    positions: List[int] = list(
+        map(int, positions_str)
+    )  # Convert positions to integers
 
     # Convert to integers and double check that the list isn't empty
     if len(positions) == 0:
