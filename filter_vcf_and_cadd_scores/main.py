@@ -12,6 +12,7 @@ import subprocess
 import glob
 import gzip
 from typing import List, Tuple
+import inspect
 from dataclasses import dataclass
 from result import Result, Ok, Err
 import polars as pl
@@ -438,6 +439,7 @@ def main() -> None:
     and exposes any errors.
     """
 
+
     # collect command line argument result
     arg_result = parse_command_line_args()
     match arg_result:
@@ -450,9 +452,27 @@ def main() -> None:
         case Err(result):
             sys.exit(f"{result}")
 
+    if verbosity:
+        ic()
+        print("Command line arguments successfully parsed.")
+        print(inspect.cleandoc(
+            f"Running on the following files provided in the command line with label '{label}'.")
+        )
+        ic(vcf_path)
+        ic(table_path)
+        ic(animals)
+
     # make sure animal names match the sample IDs in the VCF
     if verbosity:
-        print("Reading animal names from provided textfile")
+        ic()
+        print(
+            inspect.cleandoc(
+                """
+                Reading animal names from text file provided via the command line argument 
+                `--animal_file`/`-a`.
+                """
+                )
+            )
         ic(animals)
     animals_df = (
         pl.read_csv(
@@ -466,7 +486,8 @@ def main() -> None:
         .drop_nulls()
     )
     if verbosity:
-        print("Cross-referencing sample IDs between VCF and provided animal table:")
+        ic()
+        print("Cross-referencing sample IDs between the VCF and provided animal table:")
         ic(vcf_path)
         ic(animals)
     unify_result = unify_sample_names(animals_df, vcf_path, label)
@@ -478,9 +499,15 @@ def main() -> None:
 
     # filter the VCF
     if verbosity:
+        ic()
+        print("No errors encountered while matching VCF sample IDs to animal file sample IDs.")
         print(
-            "Now that sample IDs are the same across the metadata and the VCF, filter down to\
-            the desired samples provided in:"
+            inspect.cleandoc(
+                """
+                Now that sample IDs are the same across the metadata and the VCF, filter down to
+                the desired samples provided in:
+                """
+            )
         )
         ic(animals)
     filtering_result = filter_vcf_samples(renamed_vcf_path, animals, label)
@@ -492,9 +519,15 @@ def main() -> None:
 
     # define the positions
     if verbosity:
+        print("VCF sample filtering completed successfully.")
+        ic()
         print(
-            "With undesired animals removed, collect the remaining chromosomes and positions\
-            with variants in at least one sample."
+            inspect.cleandoc(
+                """
+                With undesired animals removed, collect the remaining chromosomes and positions
+                with variants in at least one sample.
+                """
+            )
         )
     position_result = collect_filtered_positions(filtered_vcf)
     match position_result:
@@ -506,11 +539,16 @@ def main() -> None:
     # lazily read the CADD Score table and filter its rows to only those
     # that contain a mutation that is present in the newly filtered VCF
     if verbosity:
+        ic()
         print(
-            "Read the table of CADD scores provided at the table path below, double check\
-            that the expected column names are present, and then filter down to the positions\
-            that remain in the filtered VCF. This will ensure that no variants will remain in\
-            the CADD Score table that are not present in one of the animals in the filtered VCF."
+            inspect.cleandoc(
+                """
+                Read the table of CADD scores provided at the table path below, double check
+                that the expected column names are present, and then filter down to the positions
+                that remain in the filtered VCF. This will ensure that no variants will remain in
+                the CADD Score table that are not present in one of the animals in the filtered VCF.
+                """
+            )
         )
         ic(table_path)
     cadd_score_df = pl.read_csv(
