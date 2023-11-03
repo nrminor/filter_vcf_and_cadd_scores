@@ -11,7 +11,7 @@ import argparse
 import subprocess
 import glob
 import gzip
-from typing import List
+from typing import List, Tuple
 from dataclasses import dataclass
 from result import Result, Ok, Err
 import polars as pl
@@ -66,35 +66,26 @@ def parse_command_line_args() -> Result[argparse.Namespace, str]:
     return Ok(args)
 
 
-def unify_sample_names(
-    animals: pl.DataFrame, vcf_path: str, label: str
-) -> Result[NewFile, str]:
+def _list_matched_samples(
+    vcf_path: str, animals: pl.DataFrame
+) -> Result[List[Tuple[str, str]], str]:
     """
-        This function double checks the VCF at the provided path to make
-        sure the sample names in the VCF are the same as the sample names
-        in the metadata. If they aren't, it looks for the metadata sample
-        names as substrings of the VCF sample names. If all metadata
-        sample names are in fact substrings of the VCF sample names, it
-        creates a tab-delimited text file to guide BCFTools, which it
-        uses in a subprocess to rename VCF sample names.
+        This helper function uses string matching to cross-reference the sample IDs
+        between a VCF and associated metadata for those samples. It can handle
+        both gzip-compressed and uncompressed VCFs, though note that it uses file
+        extensions and note the file contents itself to identify how the file should
+        be handled.
 
     Args:
-        animals: A Polars DataFrame of the sample IDs.
-        vcf_path: a character string filepath leading to the input VCF.
+        `vcf_path: str`: A string representing the file path to the VCF to be read.
+        `animals: pl.DataFrame`: A Polars dataframe of animal IDs
 
     Returns:
-        Result[NewFile, str]: A Result containing either an instance of the
-        NewFile dataclass, which contains the  file path to the new VCF output
-        by VCFtools, or an informative error message.
+        `Result[List[Tuple[str, str]], str]`: A result type containing either a list of
+        tuples, each representing the paired metadata and VCF sample IDs, or an error
+        message string that can be returned as a value without crashing the whole
+        program.
     """
-
-    if not vcf_path.endswith(".vcf.gz") and not vcf_path.endswith(".vcf"):
-        return Err(
-            "VCF is not in a recognizable format. Please double \
-                    check that your VCF file is either gzip-compressed and \
-                    ends with '.vcf.gz', or is uncompressed and ends with \
-                    '.vcf'."
-        )
 
     # create a list of sample names from the VCF
     vcf_samples: List[str] = []
@@ -129,7 +120,7 @@ def unify_sample_names(
         vcf_samples = [str(sample) for sample in vcf_samples]
 
     # match the two lists, permitting no samples to be unmatched
-    matched_sample_ids = []
+    matched_sample_ids: List[Tuple[str, str]] = []
     for meta_sample in meta_samples:
         for vcf_sample in vcf_samples:
             if meta_sample in vcf_sample:
@@ -137,6 +128,46 @@ def unify_sample_names(
                 break
     if len(matched_sample_ids) == 0:
         return Err("Failed to match sample IDs between VCF and provided animal names")
+
+    return Ok(matched_sample_ids)
+
+
+def unify_sample_names(
+    animals: pl.DataFrame, vcf_path: str, label: str
+) -> Result[NewFile, str]:
+    """
+        This function double checks the VCF at the provided path to make
+        sure the sample names in the VCF are the same as the sample names
+        in the metadata. If they aren't, it looks for the metadata sample
+        names as substrings of the VCF sample names. If all metadata
+        sample names are in fact substrings of the VCF sample names, it
+        creates a tab-delimited text file to guide BCFTools, which it
+        uses in a subprocess to rename VCF sample names.
+
+    Args:
+        animals: A Polars DataFrame of the sample IDs.
+        vcf_path: a character string filepath leading to the input VCF.
+
+    Returns:
+        Result[NewFile, str]: A Result containing either an instance of the
+        NewFile dataclass, which contains the  file path to the new VCF output
+        by VCFtools, or an informative error message.
+    """
+
+    if not vcf_path.endswith(".vcf.gz") and not vcf_path.endswith(".vcf"):
+        return Err(
+            "VCF is not in a recognizable format. Please double \
+                    check that your VCF file is either gzip-compressed and \
+                    ends with '.vcf.gz', or is uncompressed and ends with \
+                    '.vcf'."
+        )
+
+    match_results = _list_matched_samples(vcf_path, animals)
+    match match_results:
+        case Ok(matched_sample_ids):
+            pass
+        case Err(message):
+            return Err(f"{message}")
 
     # return the original VCF if the paths are the same
     if all(x == y for x, y in matched_sample_ids):
