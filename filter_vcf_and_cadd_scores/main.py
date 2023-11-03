@@ -15,6 +15,8 @@ from typing import List, Tuple
 from dataclasses import dataclass
 from result import Result, Ok, Err
 import polars as pl
+from icecream import ic
+# import strictyaml
 
 
 @dataclass
@@ -60,6 +62,13 @@ def parse_command_line_args() -> Result[argparse.Namespace, str]:
         type=str,
         required=True,
         help="A label for the data you are running on.",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        type=bool,
+        default=False,
+        help="Whether to print logging information at runtime.",
     )
     args = parser.parse_args()
 
@@ -436,10 +445,13 @@ def main() -> None:
             table_path = result.cadd_table
             animals = result.animal_file
             label = result.label
+            verbosity = result.verbose
         case Err(result):
             sys.exit(f"{result}")
 
     # make sure animal names match the sample IDs in the VCF
+    if verbosity:
+        ic(f"Reading animal names from provided textfile named {animals}.")
     animals_df = (
         pl.read_csv(
             animals,
@@ -451,6 +463,11 @@ def main() -> None:
         .select(pl.col(["Sample ID"]))
         .drop_nulls()
     )
+    if verbosity:
+        ic(
+            f"Cross-referencing sample IDs between VCF:\n{vcf_path}\nand provided\
+            animal table {animals}."
+        )
     unify_result = unify_sample_names(animals_df, vcf_path, label)
     match unify_result:
         case Ok(new_file):
@@ -459,6 +476,11 @@ def main() -> None:
             sys.exit(f"{message}")
 
     # filter the VCF
+    if verbosity:
+        ic(
+            f"Now that sample IDs are the same across the metadata and the VCF,\
+            filter down to the desired samples provided in {animals}"
+        )
     filtering_result = filter_vcf_samples(renamed_vcf_path, animals, label)
     match filtering_result:
         case Ok(filtered_file):
@@ -467,6 +489,11 @@ def main() -> None:
             sys.exit(f"{message}")
 
     # define the positions
+    if verbosity:
+        ic(
+            "With undesired animals removed, collect the remaining chromosomes and\
+            positions with variants in at least one sample."
+        )
     position_result = collect_filtered_positions(filtered_vcf)
     match position_result:
         case Ok(positions):
@@ -476,6 +503,14 @@ def main() -> None:
 
     # lazily read the CADD Score table and filter its rows to only those
     # that contain a mutation that is present in the newly filtered VCF
+    if verbosity:
+        ic(
+            f"Read the table of CADD scores provided at the path {table_path}, double\
+            check that the expected column names are present, and then filter down to\
+            the positions that remain in the filtered VCF. This will ensure that no\
+            variants will remain in the CADD Score table that are not present in one of\
+            the animals in the filtered VCF."
+        )
     cadd_score_df = pl.read_csv(
         table_path, separator="\t", skip_rows=1, null_values=["NA"], ignore_errors=True
     )
@@ -501,6 +536,9 @@ def main() -> None:
     ).filter(~pl.all_horizontal(pl.all().is_null())).sink_csv(
         f"{label}_filtered_cadd_scores.tsv", separator="\t"
     )
+
+    if verbosity:
+        ic("Filtering complete!")
 
 
 if __name__ == "__main__":
