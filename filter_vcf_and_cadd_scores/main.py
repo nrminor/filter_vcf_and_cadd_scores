@@ -15,10 +15,10 @@ from typing import List, Tuple, cast
 import inspect
 from dataclasses import dataclass
 from result import Result, Ok, Err
-from path import Path
+from path import Path # type: ignore
 import polars as pl
-from icecream import ic
-from strictyaml import load, Map, Str, Int, YAMLError
+from icecream import ic # type: ignore
+from strictyaml import load, Map, Str, Int, YAMLError # type: ignore
 
 
 @dataclass
