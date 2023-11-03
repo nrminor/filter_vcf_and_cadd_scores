@@ -1,8 +1,33 @@
 #!/usr/bin/env python3
 
 """
-DOWNSAMPLE A MULTI-SAMPLE VCF AND ASSOCIATED CADD SCORES
---------------------------------------------------------
+Python module for downsampling a multi-sample Variant Call Format
+(VCF) File and an associated table of CADD Scores.
+
+To run the module in the provided Poetry environment, make sure
+Poetry is installed, run `poetry install` in the module directory,
+and then run:
+```
+poetry run filter_vcf_and_cadd_scores/main.py \
+--vcf /path/to/variants.vcf \
+--animal_file /path/to/animals.txt \
+--cadd_table /path/to/cadd_scores.tsv \
+--label "filtered_snps" \
+--verbose true
+```
+
+Make sure you double-check any parameters that may need to be changed
+in `config.yaml`.
+
+Alternatively, you run the module at your own risk without Poetry, like so:
+```
+python3 ilter_vcf_and_cadd_scores/main.py \
+--vcf /path/to/variants.vcf \
+--animal_file /path/to/animals.txt \
+--cadd_table /path/to/cadd_scores.tsv \
+--label "filtered_snps" \
+--verbose true
+```
 """
 
 import os
@@ -59,7 +84,7 @@ def parse_command_line_args() -> Result[argparse.Namespace, str]:
     )
     parser.add_argument(
         "--cadd_table",
-        "-c",
+        "-t",
         type=str,
         required=True,
         help="CADD Score spreadsheet in TSV format.",
