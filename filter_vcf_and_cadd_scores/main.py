@@ -21,7 +21,7 @@ in `config.yaml`.
 
 Alternatively, you run the module at your own risk without Poetry, like so:
 ```
-python3 ilter_vcf_and_cadd_scores/main.py \
+python3 filter_vcf_and_cadd_scores/main.py \
 --vcf /path/to/variants.vcf \
 --animal_file /path/to/animals.txt \
 --cadd_table /path/to/cadd_scores.tsv \
