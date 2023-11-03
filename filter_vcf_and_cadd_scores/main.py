@@ -40,7 +40,7 @@ def parse_command_line_args() -> Result[argparse.Namespace, str]:
     """
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--vcf", "-v", type=str, required=True, help="Multisample VCF to subset."
+        "--vcf", "-f", type=str, required=True, help="Multisample VCF to subset."
     )
     parser.add_argument(
         "--cadd_table",
