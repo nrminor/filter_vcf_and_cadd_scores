@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from result import Result, Ok, Err
 import polars as pl
 from icecream import ic
+
 # import strictyaml
 
 
@@ -451,7 +452,8 @@ def main() -> None:
 
     # make sure animal names match the sample IDs in the VCF
     if verbosity:
-        ic(f"Reading animal names from provided textfile named {animals}.")
+        ic("Reading animal names from provided textfile")
+        ic(animals)
     animals_df = (
         pl.read_csv(
             animals,
@@ -464,10 +466,9 @@ def main() -> None:
         .drop_nulls()
     )
     if verbosity:
-        ic(
-            f"Cross-referencing sample IDs between VCF:\n{vcf_path}\nand provided\
-            animal table {animals}."
-        )
+        ic("Cross-referencing sample IDs between VCF and provided animal table:")
+        ic(vcf_path)
+        ic(animals)
     unify_result = unify_sample_names(animals_df, vcf_path, label)
     match unify_result:
         case Ok(new_file):
@@ -478,9 +479,9 @@ def main() -> None:
     # filter the VCF
     if verbosity:
         ic(
-            f"Now that sample IDs are the same across the metadata and the VCF,\
-            filter down to the desired samples provided in {animals}"
+            "Now that sample IDs are the same across the metadata and the VCF, filter down to the desired samples provided in:"
         )
+        ic(animals)
     filtering_result = filter_vcf_samples(renamed_vcf_path, animals, label)
     match filtering_result:
         case Ok(filtered_file):
@@ -491,8 +492,7 @@ def main() -> None:
     # define the positions
     if verbosity:
         ic(
-            "With undesired animals removed, collect the remaining chromosomes and\
-            positions with variants in at least one sample."
+            "With undesired animals removed, collect the remaining chromosomes and positions with variants in at least one sample."
         )
     position_result = collect_filtered_positions(filtered_vcf)
     match position_result:
@@ -505,12 +505,9 @@ def main() -> None:
     # that contain a mutation that is present in the newly filtered VCF
     if verbosity:
         ic(
-            f"Read the table of CADD scores provided at the path {table_path}, double\
-            check that the expected column names are present, and then filter down to\
-            the positions that remain in the filtered VCF. This will ensure that no\
-            variants will remain in the CADD Score table that are not present in one of\
-            the animals in the filtered VCF."
+            "Read the table of CADD scores provided at the table path below, double check that the expected column names are present, and then filter down to the positions that remain in the filtered VCF. This will ensure that no variants will remain in the CADD Score table that are not present in one of the animals in the filtered VCF."
         )
+        ic(table_path)
     cadd_score_df = pl.read_csv(
         table_path, separator="\t", skip_rows=1, null_values=["NA"], ignore_errors=True
     )
