@@ -11,14 +11,14 @@ import argparse
 import subprocess
 import glob
 import gzip
-from typing import List, Tuple
+from typing import List, Tuple, cast
 import inspect
 from dataclasses import dataclass
 from result import Result, Ok, Err
+from path import Path
 import polars as pl
 from icecream import ic
-
-# import strictyaml
+from strictyaml import load, Map, Str, Int, YAMLError
 
 
 @dataclass
@@ -30,6 +30,19 @@ class NewFile:
 
     name: str
     path: str
+
+
+@dataclass
+class ConfigParams:
+    """
+    The available config parameters provided in YAML format to this module are
+    converted into this dataclass for easier access downstream and more strict
+    typing of each field.
+    """
+
+    pos: str
+    chrom: str
+    skip: int
 
 
 def parse_command_line_args() -> Result[argparse.Namespace, str]:
@@ -66,6 +79,14 @@ def parse_command_line_args() -> Result[argparse.Namespace, str]:
         help="A label for the data you are running on.",
     )
     parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        required=False,
+        default="config.yaml",
+        help="YAML file used to configure module such that it avoids harcoding.",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         type=bool,
@@ -75,6 +96,43 @@ def parse_command_line_args() -> Result[argparse.Namespace, str]:
     args = parser.parse_args()
 
     return Ok(args)
+
+
+def parse_configurations(config_path: str) -> Result[ConfigParams, str]:
+    """
+        This module uses the library `strictYAML` to perform very strict, statically
+        typed configuration. This helps catch errors downstream while also doing away with
+        most hardcoding, which is likely to cause runtime errors for other users. Like
+        the other functions in this module, it uses Rust-like result types to handle
+        potential errors and pass them "up" to the main function.
+
+    Args:
+        `config_path: str`: A simple file path to a YAML-formatted config file in string
+        format.
+
+    Returns:
+        `Result[ConfigParams, str]`: A result-type containing either an instance of the
+        dataclass `ConfigParams` or an error message in string format.
+    """
+
+    # define the statically typed schema for the config parameters
+    schema = Map({"cadd_pos_col": Str(), "cadd_chrom_col": Str(), "cadd_skip": Int()})
+
+    # use the schema and the provided path to parse out a dictionary of parameters
+    try:
+        config_dict = cast(
+            dict, load(Path(config_path).bytes().decode("utf8"), schema).data
+        )
+    except YAMLError as message:
+        return Err(f"The provided YAML file could not be parsed:\n{message}")
+
+    params = ConfigParams(
+        pos=cast(str, config_dict.get("cadd_pos_col")),
+        chrom=cast(str, config_dict.get("cadd_chrom_col")),
+        skip=cast(int, config_dict.get("cadd_skip")),
+    )
+
+    return Ok(params)
 
 
 def _list_matched_samples(
@@ -439,24 +497,34 @@ def main() -> None:
     and exposes any errors.
     """
 
-
     # collect command line argument result
     arg_result = parse_command_line_args()
     match arg_result:
-        case Ok(result):
-            vcf_path = result.vcf
-            table_path = result.cadd_table
-            animals = result.animal_file
-            label = result.label
-            verbosity = result.verbose
+        case Ok(arguments):
+            vcf_path = arguments.vcf
+            table_path = arguments.cadd_table
+            animals = arguments.animal_file
+            label = arguments.label
+            config = arguments.config
+            verbosity = arguments.verbose
         case Err(result):
             sys.exit(f"{result}")
+
+    # define configuration parameters
+    config_result = parse_configurations(config)
+    match config_result:
+        case Ok(params):
+            pass
+        case Err(message):
+            sys.exit(f"{message}")
 
     if verbosity:
         ic()
         print("Command line arguments successfully parsed.")
-        print(inspect.cleandoc(
-            f"Running on the following files provided in the command line with label '{label}'.")
+        print(
+            inspect.cleandoc(
+                f"Running on the following files provided in the command line with label '{label}'."
+            )
         )
         ic(vcf_path)
         ic(table_path)
@@ -471,8 +539,8 @@ def main() -> None:
                 Reading animal names from text file provided via the command line argument 
                 `--animal_file`/`-a`.
                 """
-                )
             )
+        )
         ic(animals)
     animals_df = (
         pl.read_csv(
@@ -500,7 +568,9 @@ def main() -> None:
     # filter the VCF
     if verbosity:
         ic()
-        print("No errors encountered while matching VCF sample IDs to animal file sample IDs.")
+        print(
+            "No errors encountered while matching VCF sample IDs to animal file sample IDs."
+        )
         print(
             inspect.cleandoc(
                 """
@@ -552,15 +622,19 @@ def main() -> None:
         )
         ic(table_path)
     cadd_score_df = pl.read_csv(
-        table_path, separator="\t", skip_rows=1, null_values=["NA"], ignore_errors=True
+        table_path,
+        separator="\t",
+        skip_rows=params.skip,
+        null_values=["NA"],
+        ignore_errors=True,
     )
 
     assert (
-        "Pos" in cadd_score_df.columns
-    ), "Position column named 'Pos' is missing in CADD score file."
+        params.pos in cadd_score_df.columns
+    ), f"Position column named '{params.pos}' is missing in CADD score file."
     assert (
-        "Chrom" in cadd_score_df.columns
-    ), "Chromosome column named 'Chrom' is missing in CADD score file."
+        params.chrom in cadd_score_df.columns
+    ), f"Chromosome column named '{params.chrom}' is missing in CADD score file."
 
     cadd_score_lazy = cadd_score_df.lazy().with_columns(
         pl.concat_str(

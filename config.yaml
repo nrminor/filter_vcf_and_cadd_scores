@@ -1,0 +1,10 @@
+# column in the provided CADD Score Table where we expect to find
+# nucleotide positions relative to the reference sequence
+cadd_pos_col: Pos
+
+# column in the provided CADD Score Table where we expect to find
+# chromosome names/numbers (parsed as strings) in reference sequence
+cadd_chrom_col: Chrom
+
+# Rows to skip in the provided CADD Score table
+cadd_skip: 1
