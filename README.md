@@ -16,4 +16,4 @@ poetry run filter_vcf_and_cadd_scores/main.py \
 --verbose true
 ```
 
-See the docs for more details. Of note, this module is not yet backward compatible and was build with Python 3.11. Feel free to raise an issue if support for an earlier versions is needed. For now, users can run the module as-is with a Docker image built from the provided Dockerfile.
+See the docs for more details. Of note, this module is not yet backward compatible and was built with Python 3.11. Feel free to raise an issue if support for an earlier versions is needed. For now, users can run the module as-is with a Docker image built from the provided Dockerfile.
