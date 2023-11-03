@@ -108,6 +108,10 @@ def _list_matched_samples(
     if len(vcf_samples) == 0:
         return Err("Failed to define any sample names in the provided VCF.")
 
+    assert (
+        "Sample ID" in animals.columns
+    ), "Expected column named 'Sample ID' not found in provided table of animal IDs."
+
     # create a list of the sample names from the metadata
     meta_samples = animals.select("Sample ID").drop_nulls().to_series().to_list()
 
