@@ -452,7 +452,7 @@ def main() -> None:
 
     # make sure animal names match the sample IDs in the VCF
     if verbosity:
-        ic("Reading animal names from provided textfile")
+        print("Reading animal names from provided textfile")
         ic(animals)
     animals_df = (
         pl.read_csv(
@@ -466,7 +466,7 @@ def main() -> None:
         .drop_nulls()
     )
     if verbosity:
-        ic("Cross-referencing sample IDs between VCF and provided animal table:")
+        print("Cross-referencing sample IDs between VCF and provided animal table:")
         ic(vcf_path)
         ic(animals)
     unify_result = unify_sample_names(animals_df, vcf_path, label)
@@ -478,8 +478,9 @@ def main() -> None:
 
     # filter the VCF
     if verbosity:
-        ic(
-            "Now that sample IDs are the same across the metadata and the VCF, filter down to the desired samples provided in:"
+        print(
+            "Now that sample IDs are the same across the metadata and the VCF, filter down to\
+            the desired samples provided in:"
         )
         ic(animals)
     filtering_result = filter_vcf_samples(renamed_vcf_path, animals, label)
@@ -491,8 +492,9 @@ def main() -> None:
 
     # define the positions
     if verbosity:
-        ic(
-            "With undesired animals removed, collect the remaining chromosomes and positions with variants in at least one sample."
+        print(
+            "With undesired animals removed, collect the remaining chromosomes and positions\
+            with variants in at least one sample."
         )
     position_result = collect_filtered_positions(filtered_vcf)
     match position_result:
@@ -504,8 +506,11 @@ def main() -> None:
     # lazily read the CADD Score table and filter its rows to only those
     # that contain a mutation that is present in the newly filtered VCF
     if verbosity:
-        ic(
-            "Read the table of CADD scores provided at the table path below, double check that the expected column names are present, and then filter down to the positions that remain in the filtered VCF. This will ensure that no variants will remain in the CADD Score table that are not present in one of the animals in the filtered VCF."
+        print(
+            "Read the table of CADD scores provided at the table path below, double check\
+            that the expected column names are present, and then filter down to the positions\
+            that remain in the filtered VCF. This will ensure that no variants will remain in\
+            the CADD Score table that are not present in one of the animals in the filtered VCF."
         )
         ic(table_path)
     cadd_score_df = pl.read_csv(
@@ -535,7 +540,7 @@ def main() -> None:
     )
 
     if verbosity:
-        ic("Filtering complete!")
+        print("Filtering complete!")
 
 
 if __name__ == "__main__":
