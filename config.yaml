@@ -6,5 +6,9 @@ cadd_pos_col: Pos
 # chromosome names/numbers (parsed as strings) in reference sequence
 cadd_chrom_col: Chrom
 
+# Name of the column containing alternate alleles expected in the
+# provided CADD score table
+cadd_alt_col: Alt
+
 # Rows to skip in the provided CADD Score table
 cadd_skip: 1

@@ -40,10 +40,10 @@ from typing import List, Tuple, cast
 import inspect
 from dataclasses import dataclass
 from result import Result, Ok, Err
-from path import Path # type: ignore
+from path import Path  # type: ignore
 import polars as pl
-from icecream import ic # type: ignore
-from strictyaml import load, Map, Str, Int, YAMLError # type: ignore
+from icecream import ic  # type: ignore
+from strictyaml import load, Map, Str, Int, YAMLError  # type: ignore
 
 
 @dataclass
@@ -67,6 +67,7 @@ class ConfigParams:
 
     pos: str
     chrom: str
+    alt: str
     skip: int
 
 
@@ -141,7 +142,14 @@ def parse_configurations(config_path: str) -> Result[ConfigParams, str]:
     """
 
     # define the statically typed schema for the config parameters
-    schema = Map({"cadd_pos_col": Str(), "cadd_chrom_col": Str(), "cadd_skip": Int()})
+    schema = Map(
+        {
+            "cadd_pos_col": Str(),
+            "cadd_chrom_col": Str(),
+            "cadd_alt_col": Str(),
+            "cadd_skip": Int(),
+        }
+    )
 
     # use the schema and the provided path to parse out a dictionary of parameters
     try:
@@ -154,6 +162,7 @@ def parse_configurations(config_path: str) -> Result[ConfigParams, str]:
     params = ConfigParams(
         pos=cast(str, config_dict.get("cadd_pos_col")),
         chrom=cast(str, config_dict.get("cadd_chrom_col")),
+        alt=cast(str, config_dict.get("cadd_alt_col")),
         skip=cast(int, config_dict.get("cadd_skip")),
     )
 
@@ -372,7 +381,7 @@ def filter_vcf_samples(vcf_path: str, animals: str, label: str) -> Result[NewFil
         "--min-ac",
         "1",
         "-i",
-        "COUNT(GT!='0/0' && GT!='0|0' && GT!='./.')>0",
+        "COUNT(GT~'[^0|./.]')>0",
         "--output-type",
         "z",
         "-",
@@ -465,7 +474,7 @@ def collect_filtered_positions(vcf_path: str) -> Result[pl.LazyFrame, str]:
         )
 
     # define the command
-    command = ["bcftools", "query", "-f", "%CHROM\t%POS\n", vcf_path]
+    command = ["bcftools", "query", "-f", "%CHROM\t%POS\t%ALT\n", vcf_path]
 
     # Run the command and collect the output
     result = subprocess.run(
@@ -484,7 +493,9 @@ def collect_filtered_positions(vcf_path: str) -> Result[pl.LazyFrame, str]:
     raw_positions = result.stdout.strip().split("\n")
 
     # unpack the results into chromosomes and positions
-    chromosomes, positions_str = zip(*[line.split("\t") for line in raw_positions])
+    chromosomes, positions_str, alt_alleles = zip(
+        *[line.split("\t") for line in raw_positions]
+    )
     positions: List[int] = list(
         map(int, positions_str)
     )  # Convert positions to integers
@@ -498,12 +509,19 @@ def collect_filtered_positions(vcf_path: str) -> Result[pl.LazyFrame, str]:
 
     # convert the list to a polars dataframe and return it
     position_df = (
-        pl.LazyFrame({"Chromosomes": chromosomes, "Positions": positions})
+        pl.LazyFrame(
+            {
+                "Chromosomes": chromosomes,
+                "Positions": positions,
+                "Alt Alleles": alt_alleles,
+            }
+        )
         .with_columns(
             pl.concat_str(
                 [
                     pl.col("Chromosomes"),
                     pl.col("Positions"),
+                    pl.col("Alt Alleles"),
                 ],
                 separator="-",
             ).alias("Full Position"),
@@ -660,19 +678,25 @@ def main() -> None:
     assert (
         params.chrom in cadd_score_df.columns
     ), f"Chromosome column named '{params.chrom}' is missing in CADD score file."
+    assert (
+        params.alt in cadd_score_df.columns
+    ), f"Alternate allele column named '{params.alt}' is missing in CADD score file."
 
     cadd_score_lazy = cadd_score_df.lazy().with_columns(
         pl.concat_str(
             [
-                pl.col("Chrom"),
-                pl.col("Pos"),
+                pl.col(params.chrom),
+                pl.col(params.pos),
+                pl.col(params.alt),
             ],
             separator="-",
         ).alias("Full Position"),
     )
-    positions.join(cadd_score_lazy, on="Full Position", how="left").select(
-        pl.exclude("Full Position")
-    ).filter(~pl.all_horizontal(pl.all().is_null())).sink_csv(
+    positions.join(
+        cadd_score_lazy, on="Full Position", how="left"
+    ).select(pl.exclude("Full Position")).filter(
+        ~pl.all_horizontal(pl.all().is_null())
+    ).sink_csv(
         f"{label}_filtered_cadd_scores.tsv", separator="\t"
     )
 
